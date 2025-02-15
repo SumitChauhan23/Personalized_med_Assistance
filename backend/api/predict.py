@@ -58,9 +58,11 @@ def chat():
             }
         ]
     )
-
+    # print(f"user_input - {user_input}")
     # Submit the thread to the assistant (as a new run).
     run = client.beta.threads.runs.create(thread_id=thread.id, assistant_id=ASSISTANT_ID)
+    # print(f"run - {run}")
+    # print(f"thread - {thread}")
      
       # Wait for run to complete.
     while run.status != "completed":
@@ -103,7 +105,10 @@ def chat():
     print(f"/n/n Response from 1st Assistant - {response_content}")
     print(f"/n/n response from the disease prediction model - {predicted_disease}")
     print(f"/n/n Response from the 2nd Assistant - {response_content2}")
-    return jsonify({"response": response_content2})
+    if response_content == "Invalidinp":
+        return jsonify({"response": "Invalid input"})
+    else:
+        return jsonify({"response": response_content2})
     
 if __name__ == '__main__':
     app.run(debug=True)

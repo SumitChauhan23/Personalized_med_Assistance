@@ -14,7 +14,7 @@ app.use(bodyParser.json());
 
 // OpenAI API configuration
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // Make sure to set your OpenAI API key in a .env file
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 // Create a health assistant prompt template
