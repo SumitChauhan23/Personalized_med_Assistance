@@ -9,7 +9,7 @@ app.use(bodyParser.json());
 
 // OpenAI API configuration
 const openai = new OpenAI({
-  apiKey:'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', // Replace with your OpenAI API key
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 // API endpoint

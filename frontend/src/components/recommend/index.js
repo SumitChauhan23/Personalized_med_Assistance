@@ -11,7 +11,7 @@ const app = express();
 app.use(bodyParser.json());
 app.use(cors());
 
-const GOOGLE_MAPS_API_KEY = "YOUR_API_KEY";
+const GOOGLE_MAPS_API_KEY = "AIzaSyDWstl5_GbZg2G2eCodyqdF8vcpObdCeHA";
 
 // Endpoint for Disease Info
 app.get('/disease', (req, res) => {
