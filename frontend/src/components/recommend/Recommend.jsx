@@ -9,11 +9,14 @@ function Recommend() {
   const [diseaseInfo, setDiseaseInfo] = useState(null);
   const [error, setError] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
+  const [currentLocation, setCurrentLocation] = useState(null);
   const [map, setMap] = useState(null);
   const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [directionsService, setDirectionsService] = useState(null);
+  const [directionsRenderer, setDirectionsRenderer] = useState(null);
+  const [currentLocationMarker, setCurrentLocationMarker] = useState(null);
   const navigate = useNavigate();
-
 
   useEffect(() => {
     // Request location permission when component mounts
@@ -22,6 +25,7 @@ function Recommend() {
         (position) => {
           const { latitude, longitude } = position.coords;
           setUserLocation({ lat: latitude, lng: longitude });
+          setCurrentLocation({ lat: latitude, lng: longitude }); // Set initial current location
           initializeMap(latitude, longitude);
         },
         (error) => {
@@ -40,8 +44,19 @@ function Recommend() {
       zoom: 14
     });
 
-    // Add user's location marker
-    new window.google.maps.Marker({
+    // Initialize directions service and renderer
+    const dirService = new window.google.maps.DirectionsService();
+    const dirRenderer = new window.google.maps.DirectionsRenderer({
+      map: googleMap,
+      suppressMarkers: true // We'll keep our custom markers
+    });
+
+    setDirectionsService(dirService);
+    setDirectionsRenderer(dirRenderer);
+    setMap(googleMap);
+
+    // Add user's location marker and store its reference
+    const marker = new window.google.maps.Marker({
       position: { lat: latitude, lng: longitude },
       map: googleMap,
       title: 'Your Location',
@@ -49,8 +64,72 @@ function Recommend() {
         url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
       }
     });
+    setCurrentLocationMarker(marker);
+  };
 
-    setMap(googleMap);
+  const updateCurrentLocationMarker = (latitude, longitude) => {
+    if (currentLocationMarker) {
+      currentLocationMarker.setMap(null); // Remove old marker
+    }
+    
+    const newMarker = new window.google.maps.Marker({
+      position: { lat: latitude, lng: longitude },
+      map: map,
+      title: 'Your Location',
+      icon: {
+        url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+      }
+    });
+    setCurrentLocationMarker(newMarker);
+    setCurrentLocation({ lat: latitude, lng: longitude }); // Update current location state
+  };
+
+  const calculateAndDisplayRoute = (destination) => {
+    if (!currentLocation || !directionsService || !directionsRenderer) return;
+
+    const origin = new window.google.maps.LatLng(
+      currentLocation.lat,
+      currentLocation.lng
+    );
+    
+    directionsService.route(
+      {
+        origin: origin,
+        destination: destination.geometry.location,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+      },
+      (response, status) => {
+        if (status === 'OK') {
+          directionsRenderer.setDirections(response);
+          
+          // Calculate and format the distance and duration
+          const route = response.routes[0];
+          const distance = route.legs[0].distance.text;
+          const duration = route.legs[0].duration.text;
+          
+          // Update the info window content to include route information
+          const infoWindow = new window.google.maps.InfoWindow({
+            content: `
+              <div>
+                <h3 style="font-weight: bold;">${destination.name}</h3>
+                <p>${destination.vicinity}</p>
+                <p>Rating: ${destination.rating ? `${destination.rating}/5` : 'N/A'}</p>
+                <div style="margin-top: 8px; border-top: 1px solid #ccc; padding-top: 8px;">
+                  <p><strong>Distance:</strong> ${distance}</p>
+                  <p><strong>Estimated Time:</strong> ${duration}</p>
+                </div>
+              </div>
+            `
+          });
+          
+          // Open the updated info window at the destination marker
+          infoWindow.open(map, destination.marker);
+        } else {
+          console.error('Directions request failed due to ' + status);
+          setError('Could not calculate directions. Please try again.');
+        }
+      }
+    );
   };
 
   const searchNearbyPlaces = (location) => {
@@ -106,12 +185,35 @@ function Recommend() {
                 <h3 style="font-weight: bold;">${place.name}</h3>
                 <p>${place.vicinity}</p>
                 <p>Rating: ${place.rating ? `${place.rating}/5` : 'N/A'}</p>
+                <button id="getDirections_${place.place_id}" 
+                  style="background-color: #4CAF50; color: white; padding: 8px 16px; 
+                  border: none; border-radius: 4px; cursor: pointer; margin-top: 8px;">
+                  Get Directions
+                </button>
               </div>
             `
           });
 
           marker.addListener('click', () => {
+            // Clear previous directions
+            if (directionsRenderer) {
+              directionsRenderer.setDirections({ routes: [] });
+            }
+            
             infoWindow.open(map, marker);
+            
+            // Add click event listener for the Get Directions button after info window is opened
+            setTimeout(() => {
+              const button = document.getElementById(`getDirections_${place.place_id}`);
+              if (button) {
+                button.addEventListener('click', () => {
+                  calculateAndDisplayRoute({
+                    ...place,
+                    marker: marker
+                  });
+                });
+              }
+            }, 100);
           });
 
           return {
@@ -155,8 +257,9 @@ function Recommend() {
         const latitude = location.lat();
         const longitude = location.lng();
 
-        // Update the userLocation with the new location
+        // Update both user location and current location
         setUserLocation({ lat: latitude, lng: longitude });
+        setCurrentLocation({ lat: latitude, lng: longitude });
 
         // Re-center the map on the new location
         if (map) {
@@ -164,15 +267,8 @@ function Recommend() {
           map.setZoom(14);
         }
 
-        // Add a new marker for the searched location
-        new window.google.maps.Marker({
-          position: { lat: latitude, lng: longitude },
-          map: map,
-          title: 'Searched Location',
-          icon: {
-            url: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
-          }
-        });
+        // Update the location marker
+        updateCurrentLocationMarker(latitude, longitude);
 
         // Fetch nearby places based on the new location
         searchNearbyPlaces({ lat: latitude, lng: longitude });

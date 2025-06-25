@@ -49,66 +49,54 @@ def predictDisease(symptoms):
 def chat():
     user_input = request.json.get('description', '')
 
-    # Create a thread with the user message.
-    thread = client.beta.threads.create(
-        messages=[
-            {
-                "role": "user",
-                "content": user_input,
-            }
-        ]
-    )
-    # print(f"user_input - {user_input}")
-    # Submit the thread to the assistant (as a new run).
-    run = client.beta.threads.runs.create(thread_id=thread.id, assistant_id=ASSISTANT_ID)
-    # print(f"run - {run}")
-    # print(f"thread - {thread}")
-     
-      # Wait for run to complete.
-    while run.status != "completed":
-        run = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-        time.sleep(1)
+    try:
+        # 1st Assistant Interaction
+        thread = client.beta.threads.create(messages=[{"role": "user", "content": user_input}])
+        run = client.beta.threads.runs.create(thread_id=thread.id, assistant_id=ASSISTANT_ID)
 
-    # Get the latest message from the thread.
-    message_response = client.beta.threads.messages.list(thread_id=thread.id)
-    messages = message_response.data
+        # Wait for the run to complete with a timeout
+        timeout = 30  # seconds
+        start_time = time.time()
 
-    latest_message = messages[0]
-    response_content = latest_message.content[0].text.value
-    print(response_content)
-    predicted_disease = predictDisease(response_content)
-    # Pass the symptoms to the predictDisease function
-    
-    thread2 = client.beta.threads.create(
-        messages=[
-            {
-                "role": "user",
-                "content": predicted_disease,
-            }
-        ]
-    )
+        while run.status != "completed":
+            if time.time() - start_time > timeout:
+                raise TimeoutError("OpenAI assistant response timed out.")
+            run = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+            print(f"Waiting for first assistant... Status: {run.status}")
+            time.sleep(1)
 
+        # Extract response
+        message_response = client.beta.threads.messages.list(thread_id=thread.id)
+        response_content = message_response.data[0].content[0].text.value
+        print("First assistant response:", response_content)
 
-    run2 = client.beta.threads.runs.create(thread_id=thread2.id, assistant_id=ASSISTANT_ID2) 
-    
-    while run2.status != "completed":
-        run2 = client.beta.threads.runs.retrieve(thread_id=thread2.id, run_id=run2.id)
-        time.sleep(1)
-    message_response2 = client.beta.threads.messages.list(thread_id=thread2.id)
-    messages2 = message_response2.data
+        # Predict disease
+        predicted_disease = predictDisease(response_content)
+        print("Predicted disease:", predicted_disease)
 
-    latest_message2 = messages2[0]
-    response_content2 = latest_message2.content[0].text.value
+        # 2nd Assistant Interaction
+        thread2 = client.beta.threads.create(messages=[{"role": "user", "content": predicted_disease}])
+        run2 = client.beta.threads.runs.create(thread_id=thread2.id, assistant_id=ASSISTANT_ID2)
 
+        # Wait with timeout again
+        start_time = time.time()
+        while run2.status != "completed":
+            if time.time() - start_time > timeout:
+                raise TimeoutError("Second assistant response timed out.")
+            run2 = client.beta.threads.runs.retrieve(thread_id=thread2.id, run_id=run2.id)
+            print(f"Waiting for second assistant... Status: {run2.status}")
+            time.sleep(1)
 
-    # second_assistant_response = thread2['choices'][0]['message']['content']
-    print(f"/n/n Response from 1st Assistant - {response_content}")
-    print(f"/n/n response from the disease prediction model - {predicted_disease}")
-    print(f"/n/n Response from the 2nd Assistant - {response_content2}")
-    if response_content == "Invalidinp":
-        return jsonify({"response": "Invalid input"})
-    else:
+        message_response2 = client.beta.threads.messages.list(thread_id=thread2.id)
+        response_content2 = message_response2.data[0].content[0].text.value
+        print("Second assistant response:", response_content2)
+
         return jsonify({"response": response_content2})
     
+    except Exception as e:
+        print("Error:", str(e))
+        return jsonify({"response": "An error occurred. Please try again."}), 500
+
+    
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
