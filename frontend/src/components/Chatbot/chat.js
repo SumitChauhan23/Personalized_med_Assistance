@@ -14,7 +14,7 @@ app.use(bodyParser.json());
 
 // OpenAI API configuration
 const openai = new OpenAI({
-  apiKey: "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"
+  apiKey: "open ai key"
 });
 
 // Create a health assistant prompt template
